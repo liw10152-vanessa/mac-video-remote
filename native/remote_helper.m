@@ -1,3 +1,5 @@
+// Copyright © 2026 liw10152-vanessa. All rights reserved.
+// Personal-use permission is described in LICENSE.md.
 #import <AppKit/AppKit.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/Foundation.h>

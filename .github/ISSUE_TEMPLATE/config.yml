@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/liw10152-vanessa/mac-video-remote/security/advisories/new
+    about: Report security issues privately. Never post pairing details publicly.

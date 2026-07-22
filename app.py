@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright © 2026 liw10152-vanessa. All rights reserved.
+# Personal-use permission is described in LICENSE.md.
 """Local-only iPhone remote for video playback on macOS."""
 
 import argparse
@@ -79,6 +81,7 @@ class Controller:
     def __init__(self):
         self._lock = threading.Lock()
         self._hold_process = None
+        self._hold_timeout = None
 
     def perform(self, action):
         if action == "holdFastStart":
@@ -100,12 +103,18 @@ class Controller:
             self._stop_hold_locked()
             self._hold_process = subprocess.Popen([str(HELPER), "hold", "124"],
                                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self._hold_timeout = threading.Timer(10.0, self.stop_hold)
+            self._hold_timeout.daemon = True
+            self._hold_timeout.start()
 
     def stop_hold(self):
         with self._lock:
             self._stop_hold_locked()
 
     def _stop_hold_locked(self):
+        if self._hold_timeout:
+            self._hold_timeout.cancel()
+            self._hold_timeout = None
         if self._hold_process and self._hold_process.poll() is None:
             self._hold_process.terminate()
             try:
@@ -139,8 +148,6 @@ def make_handler(pairing_code, controller):
             parsed = urlparse(self.path)
             if parsed.path == "/health":
                 return self.send_json(200, {"ok": True, "message": "Mac Video Remote is running"})
-            if not self.authenticated(parsed):
-                return self.send_json(401, {"ok": False, "message": "配对码不正确"})
             if parsed.path == "/":
                 data = WEB_UI.read_bytes()
                 self.send_response(200)
@@ -149,6 +156,8 @@ def make_handler(pairing_code, controller):
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 return self.wfile.write(data)
+            if not self.authenticated(parsed):
+                return self.send_json(401, {"ok": False, "message": "配对码不正确"})
             if parsed.path == "/api/state":
                 return self.send_json(200, current_state())
             return self.send_json(404, {"ok": False, "message": "Not Found"})

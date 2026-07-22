@@ -1,3 +1,4 @@
+# Copyright © 2026 liw10152-vanessa. All rights reserved.
 import json
 import sys
 import threading
@@ -42,6 +43,12 @@ class ServerTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as caught:
             urllib.request.urlopen(self.base + "/api/state")
         self.assertEqual(caught.exception.code, 401)
+
+    def test_remote_shell_can_reload_without_code(self):
+        with urllib.request.urlopen(self.base + "/") as response:
+            html = response.read().decode("utf-8")
+        self.assertIn("视频遥控器", html)
+        self.assertIn("X-Pair-Code", html)
 
     @mock.patch.object(app, "current_state")
     def test_action_is_dispatched(self, state):
