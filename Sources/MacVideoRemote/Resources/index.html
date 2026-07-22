@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#0d1117">
+  <title>Mac 视频遥控器</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top, #28364d, #0d1117 45%); color: #f4f7fb; }
+    main { max-width: 520px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 18px) 18px calc(env(safe-area-inset-bottom) + 24px); }
+    header { padding: 8px 4px 18px; }
+    h1 { font-size: 28px; margin: 0 0 8px; }
+    #status { color: #aebbd0; font-size: 15px; }
+    #status strong { color: #83d9ad; }
+    .card { background: rgba(25,32,44,.82); border: 1px solid rgba(255,255,255,.09); border-radius: 24px; padding: 16px; margin-bottom: 14px; box-shadow: 0 12px 45px rgba(0,0,0,.22); backdrop-filter: blur(18px); }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    button { border: 0; border-radius: 18px; min-height: 66px; padding: 10px 6px; font: inherit; font-weight: 650; color: #eef4ff; background: #303b4c; touch-action: manipulation; }
+    button:active, button.active { transform: scale(.97); background: #536b91; }
+    button.primary { background: linear-gradient(145deg,#577ac5,#385897); font-size: 22px; }
+    button.hold { min-height: 92px; grid-column: 1 / -1; background: linear-gradient(145deg,#e48a35,#b8522f); font-size: 20px; }
+    button small { display: block; margin-top: 4px; opacity: .68; font-weight: 500; }
+    .section-title { font-size: 13px; color: #8e9bb0; margin: 1px 4px 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .warning { display:none; margin-top: 10px; color: #ffba72; line-height: 1.45; }
+    footer { color:#738096; text-align:center; font-size:12px; padding:8px; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>视频遥控器</h1>
+    <div id="status">正在连接 Mac…</div>
+    <div id="warning" class="warning">需要在 Mac 的“系统设置 → 隐私与安全性 → 辅助功能”中允许控制。</div>
+  </header>
+
+  <section class="card">
+    <div class="section-title">播放</div>
+    <div class="grid">
+      <button data-action="seekBackward">↶ 10秒</button>
+      <button class="primary" data-action="playPause">▶︎ / Ⅱ</button>
+      <button data-action="seekForward">10秒 ↷</button>
+      <button data-action="volumeDown">音量 −</button>
+      <button data-action="mute">静音</button>
+      <button data-action="volumeUp">音量 ＋</button>
+      <button data-action="fullscreen">全屏</button>
+      <button data-action="speedNormal">1×</button>
+      <button data-action="speedDouble">2×</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="section-title">倍速</div>
+    <div class="grid">
+      <button data-action="speedDown">倍速 −</button>
+      <button data-action="speedNormal">恢复 1×</button>
+      <button data-action="speedUp">倍速 ＋</button>
+      <button id="hold" class="hold">
+        按住临时快进
+        <small>等同长按键盘 →，松手立即恢复</small>
+      </button>
+    </div>
+  </section>
+  <footer>只通过当前 Wi‑Fi 局域网发送控制指令</footer>
+</main>
+<script>
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code') || localStorage.getItem('pairCode') || '';
+  if (code) localStorage.setItem('pairCode', code);
+  const headers = {'X-Pair-Code': code};
+  let holding = false;
+
+  async function command(action) {
+    try {
+      const response = await fetch('/api/action', {
+        method: 'POST', headers: {...headers, 'Content-Type':'application/json'},
+        body: JSON.stringify({action})
+      });
+      if (!response.ok) throw new Error(await response.text());
+      if (navigator.vibrate) navigator.vibrate(12);
+    } catch (error) {
+      document.querySelector('#status').textContent = '连接失败，请检查 Mac 服务';
+    }
+  }
+
+  document.querySelectorAll('button[data-action]').forEach(button => {
+    button.addEventListener('click', () => command(button.dataset.action));
+  });
+
+  const hold = document.querySelector('#hold');
+  function startHold(event) {
+    event.preventDefault();
+    if (holding) return;
+    holding = true; hold.classList.add('active'); command('holdFastStart');
+  }
+  function endHold(event) {
+    if (event) event.preventDefault();
+    if (!holding) return;
+    holding = false; hold.classList.remove('active'); command('holdFastEnd');
+  }
+  hold.addEventListener('pointerdown', startHold);
+  hold.addEventListener('pointerup', endHold);
+  hold.addEventListener('pointercancel', endHold);
+  hold.addEventListener('pointerleave', endHold);
+  window.addEventListener('pagehide', endHold);
+
+  async function refresh() {
+    try {
+      const response = await fetch('/api/state', {headers});
+      if (!response.ok) throw new Error();
+      const state = await response.json();
+      document.querySelector('#status').innerHTML = `<strong>${state.profile}</strong> · ${state.appName}`;
+      document.querySelector('#warning').style.display = state.accessibilityTrusted ? 'none' : 'block';
+      document.querySelectorAll('[data-action]').forEach(button => {
+        button.hidden = !state.controls.includes(button.dataset.action);
+      });
+    } catch (_) {
+      document.querySelector('#status').textContent = '未连接';
+    }
+  }
+  refresh(); setInterval(refresh, 2000);
+</script>
+</body>
+</html>
