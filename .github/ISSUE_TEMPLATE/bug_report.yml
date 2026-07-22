@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible playback-control or compatibility problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include pairing codes, control URLs, or private network details."
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "macOS 26.5"
+    validations:
+      required: true
+  - type: input
+    id: application
+    attributes:
+      label: Video application and version
+      placeholder: "Bilibili 1.17.6"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true

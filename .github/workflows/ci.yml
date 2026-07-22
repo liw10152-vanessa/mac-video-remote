@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build native helper and run tests
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build native macOS helper
+        run: ./scripts/build.sh
+
+      - name: Compile Python sources
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
+        run: python3 -m py_compile app.py Tests/test_app.py
+
+      - name: Run test suite
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
+        run: python3 -m unittest discover -s Tests -v
+
+      - name: Check whitespace
+        run: git diff --check
