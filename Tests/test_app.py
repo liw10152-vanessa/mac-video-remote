@@ -53,6 +53,9 @@ class ServerTests(unittest.TestCase):
             html = response.read().decode("utf-8")
         self.assertIn("视频遥控器", html)
         self.assertIn("X-Pair-Code", html)
+        self.assertIn('id="pairing"', html)
+        self.assertIn("display-mode: standalone", html)
+        self.assertIn("Safari must keep the full URL", html)
 
     @mock.patch.object(app, "current_state")
     def test_action_is_dispatched(self, state):

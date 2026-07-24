@@ -5,6 +5,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
   <meta name="theme-color" content="#0d1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="视频遥控器">
   <link rel="icon" href="data:,">
   <title>Mac 视频遥控器</title>
   <style>
@@ -26,6 +29,12 @@
     .section-title { font-size: 13px; color: #8e9bb0; margin: 1px 4px 11px; text-transform: uppercase; letter-spacing: .08em; }
     #mode { color: #7f8da3; font-size: 13px; margin-top: 5px; }
     .warning { display:none; margin-top: 10px; color: #ffba72; line-height: 1.45; }
+    .pairing { display:none; margin-top: 14px; padding: 14px; border-radius: 18px; background: rgba(228,138,53,.12); border: 1px solid rgba(255,186,114,.35); }
+    .pairing label { display:block; color:#ffd6ad; font-size:14px; margin-bottom:9px; }
+    .pair-row { display:grid; grid-template-columns: 1fr auto; gap:9px; }
+    .pairing input { min-width:0; border:1px solid #52647e; border-radius:14px; padding:12px 14px; font:inherit; font-size:18px; letter-spacing:.16em; color:#fff; background:#141b25; }
+    .pairing button { min-height:48px; padding:9px 16px; border-radius:14px; background:#d97832; }
+    .pairing small { display:block; margin-top:9px; color:#aebbd0; line-height:1.4; }
     footer { color:#738096; text-align:center; font-size:12px; padding:8px; }
   </style>
 </head>
@@ -36,6 +45,15 @@
     <div id="status">正在连接 Mac…</div>
     <div id="mode"></div>
     <div id="warning" class="warning">需要在 Mac 的“系统设置 → 隐私与安全性 → 辅助功能”中允许控制。</div>
+    <form id="pairing" class="pairing">
+      <label for="pairCode">主屏幕版需要重新配对</label>
+      <div class="pair-row">
+        <input id="pairCode" name="pairCode" type="text" inputmode="numeric" autocomplete="one-time-code"
+               pattern="[0-9]{6}" maxlength="6" placeholder="六位配对码" aria-label="六位配对码" required>
+        <button type="submit">连接</button>
+      </div>
+      <small>配对码显示在 Mac 的遥控器终端窗口中，只保存在这台 iPhone 上。</small>
+    </form>
   </header>
 
   <section class="card">
@@ -79,21 +97,50 @@
 </main>
 <script>
   const params = new URLSearchParams(location.search);
-  const code = params.get('code') || localStorage.getItem('pairCode') || '';
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  let code = params.get('code') || localStorage.getItem('pairCode') || '';
   if (code) {
     localStorage.setItem('pairCode', code);
-    if (params.has('code')) history.replaceState({}, '', '/');
+    // Safari must keep the full URL so "Add to Home Screen" includes the code.
+    // Once running as a standalone web app, the code can be hidden safely.
+    if (standalone && params.has('code')) history.replaceState({}, '', '/');
   }
-  const headers = {'X-Pair-Code': code};
+  const pairing = document.querySelector('#pairing');
+  const pairCode = document.querySelector('#pairCode');
   let holding = false;
 
+  function authHeaders() {
+    return {'X-Pair-Code': code};
+  }
+
+  function showPairing(message = '请输入 Mac 终端显示的六位配对码') {
+    document.querySelector('#status').textContent = message;
+    pairing.style.display = 'block';
+  }
+
+  pairing.addEventListener('submit', event => {
+    event.preventDefault();
+    const nextCode = pairCode.value.trim();
+    if (!/^\d{6}$/.test(nextCode)) {
+      showPairing('配对码应为六位数字');
+      return;
+    }
+    code = nextCode;
+    localStorage.setItem('pairCode', code);
+    pairing.style.display = 'none';
+    document.querySelector('#status').textContent = '正在连接 Mac…';
+    refresh();
+  });
+
   async function command(action) {
+    if (!code) return showPairing();
     try {
       const response = await fetch('/api/action', {
-        method: 'POST', headers: {...headers, 'Content-Type':'application/json'},
+        method: 'POST', headers: {...authHeaders(), 'Content-Type':'application/json'},
         body: JSON.stringify({action}),
         keepalive: action === 'holdFastEnd'
       });
+      if (response.status === 401) return showPairing('配对码不正确，请重新输入');
       if (!response.ok) throw new Error(await response.text());
       if (navigator.vibrate) navigator.vibrate(12);
     } catch (error) {
@@ -123,10 +170,13 @@
   window.addEventListener('pagehide', endHold);
 
   async function refresh() {
+    if (!code) return showPairing();
     try {
-      const response = await fetch('/api/state', {headers});
+      const response = await fetch('/api/state', {headers: authHeaders()});
+      if (response.status === 401) return showPairing('配对码不正确，请重新输入');
       if (!response.ok) throw new Error();
       const state = await response.json();
+      pairing.style.display = 'none';
       document.querySelector('#status').innerHTML = `<strong>${state.profile}</strong> · ${state.appName}`;
       document.querySelector('#mode').textContent = state.message || '';
       document.querySelector('#holdHint').textContent = state.controlMode === 'browser-extension'
