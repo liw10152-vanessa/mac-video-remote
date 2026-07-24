@@ -6,6 +6,12 @@ All notable changes to Mac Video Remote are documented here.
 
 ### Added
 
+- Automatic profiles for Douyin and Rednote/Xiaohongshu
+- Browser detection for Safari, Chrome, Edge, Arc, Brave, and Firefox
+- Optional local Chromium extension for exact HTML5 video control
+- 0.5×, 1.25×, 1.5×, and direct webpage playback-speed actions
+- Authenticated browser-command queue with stale-command protection
+- Google AI Studio deployment-boundary guide to prevent nonfunctional cloud remotes
 - English and Chinese product documentation
 - Original social-preview artwork and a real iPhone-size UI screenshot
 - Personal-use source-available license and explicit copyright notices
@@ -15,6 +21,9 @@ All notable changes to Mac Video Remote are documented here.
 
 ### Changed
 
+- Webpages automatically switch between enhanced extension control and keyboard fallback
+- Hold-to-fast-forward uses temporary 3× speed in enhanced webpage mode
+- Corrected Bilibili speed-up/down key codes to `]` and `[`
 - Corrected outdated Swift Package and rotating-code statements
 - Clarified supported applications, privacy boundaries, and network risks
 

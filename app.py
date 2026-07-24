@@ -11,6 +11,8 @@ import signal
 import socket
 import subprocess
 import threading
+import time
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -29,11 +31,46 @@ PROFILES = {
     "com.quark.desktop": {
         "name": "夸克",
         "controls": ["playPause", "seekBackward", "seekForward", "holdFastStart", "holdFastEnd",
-                     "speedNormal", "speedDouble", "fullscreen", "mute", "volumeDown", "volumeUp"],
+                     "speedNormal", "speedDouble", "speedUp", "speedDown", "fullscreen", "mute",
+                     "volumeDown", "volumeUp"],
+    },
+    "com.bytedance.douyin.desktop": {
+        "name": "抖音",
+        "controls": ["playPause", "seekBackward", "seekForward", "holdFastStart", "holdFastEnd",
+                     "fullscreen", "mute", "volumeDown", "volumeUp"],
+    },
+    "com.xingin.discover": {
+        "name": "小红书",
+        "controls": ["playPause", "seekBackward", "seekForward", "holdFastStart", "holdFastEnd",
+                     "fullscreen", "mute", "volumeDown", "volumeUp"],
     },
 }
+
+BROWSERS = {
+    "com.apple.Safari": "Safari 网页视频",
+    "com.google.Chrome": "Chrome 网页视频",
+    "com.microsoft.edgemac": "Edge 网页视频",
+    "company.thebrowser.Browser": "Arc 网页视频",
+    "com.brave.Browser": "Brave 网页视频",
+    "org.mozilla.firefox": "Firefox 网页视频",
+}
+
 GENERIC_CONTROLS = ["playPause", "seekBackward", "seekForward", "holdFastStart", "holdFastEnd",
                     "speedNormal", "speedDouble", "fullscreen", "mute", "volumeDown", "volumeUp"]
+BROWSER_FALLBACK_CONTROLS = [
+    "playPause", "seekBackward", "seekForward", "holdFastStart", "holdFastEnd",
+    "fullscreen", "mute", "volumeDown", "volumeUp",
+]
+BROWSER_CONTROLS = [
+    "playPause", "seekBackward", "seekForward", "holdFastStart", "holdFastEnd",
+    "speedHalf", "speedNormal", "speed125", "speed150", "speedDouble", "speedUp", "speedDown",
+    "fullscreen", "mute", "volumeDown", "volumeUp",
+]
+BROWSER_EXTENSION_ACTIONS = {
+    "playPause", "seekBackward", "seekForward", "holdFastStart", "holdFastEnd",
+    "speedHalf", "speedNormal", "speed125", "speed150", "speedDouble", "speedUp", "speedDown",
+    "mute",
+}
 
 KEY_ACTIONS = {
     "playPause": (49, ""),       # Space
@@ -43,8 +80,8 @@ KEY_ACTIONS = {
     "mute": (46, ""),           # M
     "speedNormal": (18, "shift"),
     "speedDouble": (19, "shift"),
-    "speedUp": (27, ""),
-    "speedDown": (24, ""),
+    "speedUp": (30, ""),        # ]
+    "speedDown": (33, ""),      # [
 }
 
 
@@ -68,13 +105,58 @@ def load_or_create_pairing_code():
     return code
 
 
-def current_state():
+class BrowserCommandBroker:
+    """Small authenticated command queue for the optional Chromium extension."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._commands = deque(maxlen=32)
+        self._sequence = 0
+        self._last_seen = 0.0
+
+    @property
+    def connected(self):
+        with self._lock:
+            return self._last_seen > 0 and time.monotonic() - self._last_seen < 3.0
+
+    def publish(self, action):
+        with self._lock:
+            self._sequence += 1
+            self._commands.append({"id": self._sequence, "action": action})
+            return self._sequence
+
+    def poll(self, since=None):
+        with self._lock:
+            self._last_seen = time.monotonic()
+            if since is None:
+                return {"cursor": self._sequence, "commands": []}
+            commands = [item for item in self._commands if item["id"] > since]
+            return {"cursor": self._sequence, "commands": commands}
+
+
+def current_state(browser_broker=None):
     try:
         raw = json.loads(run_helper("state", check=True).stdout)
     except (subprocess.SubprocessError, json.JSONDecodeError, OSError):
         raw = {"appName": "未知 App", "bundleIdentifier": "unknown", "accessibilityTrusted": False}
-    profile = PROFILES.get(raw["bundleIdentifier"], {"name": "通用视频", "controls": GENERIC_CONTROLS})
-    return {**raw, "profile": profile["name"], "controls": profile["controls"]}
+    bundle_identifier = raw["bundleIdentifier"]
+    if bundle_identifier in BROWSERS:
+        enhanced = bool(browser_broker and browser_broker.connected)
+        return {
+            **raw,
+            "profile": BROWSERS[bundle_identifier],
+            "controls": BROWSER_CONTROLS if enhanced else BROWSER_FALLBACK_CONTROLS,
+            "controlMode": "browser-extension" if enhanced else "keyboard",
+            "message": "网页增强控制已连接" if enhanced else "通用按键模式；安装扩展可获得精确倍速",
+        }
+    profile = PROFILES.get(bundle_identifier, {"name": "通用视频", "controls": GENERIC_CONTROLS})
+    return {
+        **raw,
+        "profile": profile["name"],
+        "controls": profile["controls"],
+        "controlMode": "keyboard",
+        "message": "控制 Mac 当前最前面的应用",
+    }
 
 
 class Controller:
@@ -124,9 +206,11 @@ class Controller:
         self._hold_process = None
 
 
-def make_handler(pairing_code, controller):
+def make_handler(pairing_code, controller, browser_broker=None):
+    browser_broker = browser_broker or BrowserCommandBroker()
+
     class RequestHandler(BaseHTTPRequestHandler):
-        server_version = "MacVideoRemote/0.1"
+        server_version = "MacVideoRemote/0.2"
 
         def log_message(self, fmt, *args):
             return
@@ -159,7 +243,14 @@ def make_handler(pairing_code, controller):
             if not self.authenticated(parsed):
                 return self.send_json(401, {"ok": False, "message": "配对码不正确"})
             if parsed.path == "/api/state":
-                return self.send_json(200, current_state())
+                return self.send_json(200, current_state(browser_broker))
+            if parsed.path == "/api/browser/poll":
+                raw_since = parse_qs(parsed.query).get("since", [None])[0]
+                try:
+                    since = int(raw_since) if raw_since is not None else None
+                except ValueError:
+                    return self.send_json(400, {"ok": False, "message": "since 必须是整数"})
+                return self.send_json(200, browser_broker.poll(since))
             return self.send_json(404, {"ok": False, "message": "Not Found"})
 
         def do_POST(self):
@@ -171,11 +262,16 @@ def make_handler(pairing_code, controller):
             try:
                 length = min(int(self.headers.get("Content-Length", 0)), 4096)
                 action = json.loads(self.rfile.read(length))["action"]
-                state = current_state()
+                state = current_state(browser_broker)
                 if action not in state["controls"]:
                     raise ValueError("当前配置不支持该指令")
-                controller.perform(action)
-                return self.send_json(200, {"ok": True, "message": action})
+                if state["controlMode"] == "browser-extension" and action in BROWSER_EXTENSION_ACTIONS:
+                    browser_broker.publish(action)
+                    transport = "browser-extension"
+                else:
+                    controller.perform(action)
+                    transport = "keyboard"
+                return self.send_json(200, {"ok": True, "message": action, "transport": transport})
             except (ValueError, KeyError, json.JSONDecodeError) as error:
                 return self.send_json(400, {"ok": False, "message": str(error)})
 
@@ -193,7 +289,11 @@ def main():
     pairing_code = args.code or load_or_create_pairing_code()
     hostname = socket.gethostname().split(".")[0] + ".local"
     controller = Controller()
-    server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(pairing_code, controller))
+    browser_broker = BrowserCommandBroker()
+    server = ThreadingHTTPServer(
+        ("0.0.0.0", args.port),
+        make_handler(pairing_code, controller, browser_broker),
+    )
 
     def stop_server(*_):
         controller.stop_hold()

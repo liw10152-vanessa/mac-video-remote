@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Mac Video Remote Web Controller",
+  "version": "0.2.0",
+  "description": "Connects Mac Video Remote to the active HTML5 video tab.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "http://127.0.0.1:8765/*",
+    "http://localhost:8765/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Mac Video Remote"
+  }
+}

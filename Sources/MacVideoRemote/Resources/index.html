@@ -24,6 +24,7 @@
     button.hold { min-height: 92px; grid-column: 1 / -1; background: linear-gradient(145deg,#e48a35,#b8522f); font-size: 20px; }
     button small { display: block; margin-top: 4px; opacity: .68; font-weight: 500; }
     .section-title { font-size: 13px; color: #8e9bb0; margin: 1px 4px 11px; text-transform: uppercase; letter-spacing: .08em; }
+    #mode { color: #7f8da3; font-size: 13px; margin-top: 5px; }
     .warning { display:none; margin-top: 10px; color: #ffba72; line-height: 1.45; }
     footer { color:#738096; text-align:center; font-size:12px; padding:8px; }
   </style>
@@ -33,6 +34,7 @@
   <header>
     <h1>视频遥控器</h1>
     <div id="status">正在连接 Mac…</div>
+    <div id="mode"></div>
     <div id="warning" class="warning">需要在 Mac 的“系统设置 → 隐私与安全性 → 辅助功能”中允许控制。</div>
   </header>
 
@@ -46,20 +48,30 @@
       <button data-action="mute">静音</button>
       <button data-action="volumeUp">音量 ＋</button>
       <button data-action="fullscreen">全屏</button>
-      <button data-action="speedNormal">1×</button>
-      <button data-action="speedDouble">2×</button>
     </div>
   </section>
 
   <section class="card">
     <div class="section-title">倍速</div>
     <div class="grid">
+      <button data-action="speedHalf">0.5×</button>
+      <button data-action="speedNormal">1×</button>
+      <button data-action="speed125">1.25×</button>
+      <button data-action="speed150">1.5×</button>
+      <button data-action="speedDouble">2×</button>
+      <button data-action="speedUp">倍速 ＋</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="section-title">临时加速</div>
+    <div class="grid">
       <button data-action="speedDown">倍速 −</button>
       <button data-action="speedNormal">恢复 1×</button>
       <button data-action="speedUp">倍速 ＋</button>
       <button id="hold" class="hold">
         按住临时快进
-        <small>等同长按键盘 →，松手立即恢复</small>
+        <small id="holdHint">等同长按键盘 →，松手立即恢复</small>
       </button>
     </div>
   </section>
@@ -116,6 +128,10 @@
       if (!response.ok) throw new Error();
       const state = await response.json();
       document.querySelector('#status').innerHTML = `<strong>${state.profile}</strong> · ${state.appName}`;
+      document.querySelector('#mode').textContent = state.message || '';
+      document.querySelector('#holdHint').textContent = state.controlMode === 'browser-extension'
+        ? '按住临时 3×，松手恢复原速度'
+        : '等同长按键盘 →，松手立即恢复';
       document.querySelector('#warning').style.display = state.accessibilityTrusted ? 'none' : 'block';
       document.querySelectorAll('[data-action]').forEach(button => {
         button.hidden = !state.controls.includes(button.dataset.action);
