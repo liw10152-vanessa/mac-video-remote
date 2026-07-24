@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mac Video Remote 设置</title>
+  <style>
+    body { max-width: 520px; margin: 48px auto; padding: 0 20px; font: 16px -apple-system, sans-serif; color: #172033; }
+    label { display: block; margin: 20px 0 7px; font-weight: 650; }
+    input { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #bac3d2; border-radius: 10px; font: inherit; }
+    button { margin-top: 20px; padding: 12px 22px; border: 0; border-radius: 10px; background: #315fa8; color: white; font: inherit; font-weight: 650; }
+    #status { margin-left: 12px; color: #287a4c; }
+    p { color: #58657a; line-height: 1.55; }
+  </style>
+</head>
+<body>
+  <h1>网页增强控制</h1>
+  <p>配对码只保存在这台 Mac 的浏览器中，扩展只连接本机的 Mac Video Remote 服务。</p>
+  <label for="endpoint">本机服务地址</label>
+  <input id="endpoint" value="http://127.0.0.1:8765">
+  <label for="pairingCode">六位配对码</label>
+  <input id="pairingCode" inputmode="numeric" maxlength="6" placeholder="例如 123456">
+  <button id="save">保存</button><span id="status"></span>
+  <script src="options.js"></script>
+</body>
+</html>

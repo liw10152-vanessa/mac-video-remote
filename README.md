@@ -8,7 +8,7 @@
 
 [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-111827?logo=apple)](#requirements)
 [![iPhone Safari](https://img.shields.io/badge/iPhone-Safari-2563EB?logo=safari)](#quick-start)
-[![Tests](https://img.shields.io/badge/tests-4%20passing-16A34A)](#development)
+[![Tests](https://img.shields.io/badge/tests-9%20passing-16A34A)](#development)
 [![License](https://img.shields.io/badge/license-personal%20use-orange)](LICENSE.md)
 
 > This is a public source-available project, not an open-source project. Copyright is retained by the author. Personal, non-commercial use of the unmodified software is permitted under the [license](LICENSE.md).
@@ -20,10 +20,12 @@ Sometimes the Mac is just far enough away that pausing a video or changing playb
 ## Features
 
 - Play/pause, seek backward/forward, fullscreen, mute, and system volume
-- 1× and 2× playback shortcuts plus app-specific speed controls
-- Press-and-hold fast-forward that releases immediately when your finger lifts
-- Automatic profiles for Quark (`com.quark.desktop`) and Bilibili (`com.bilibili.bilibiliPC`)
-- Generic fallback for video websites and other media apps
+- Exact 0.5×, 1×, 1.25×, 1.5×, and 2× speeds for enhanced web video
+- Hold for temporary 3× speed on webpages or repeated seek in desktop clients
+- Automatic profiles for Douyin, Rednote, Quark, and Bilibili
+- Browser detection for Safari, Chrome, Edge, Arc, Brave, and Firefox
+- Optional Chromium extension that controls the active HTML5 video directly
+- Automatic keyboard fallback when the extension is unavailable
 - No iPhone app, account, cloud service, analytics, or third-party dependency
 - Local-network pairing protected by a persistent private code
 - Native macOS keyboard events through public `CGEvent` and Accessibility APIs
@@ -82,6 +84,18 @@ The web interface removes the code from the visible address bar after pairing an
 
 Before walking away, start the video and click the player once so it has keyboard focus. Commands are sent to the frontmost application.
 
+### Enhanced control for video websites
+
+For reliable seeking and exact speed control in Chrome or Edge:
+
+1. Start Mac Video Remote and note the six-digit pairing code.
+2. Open `chrome://extensions` or `edge://extensions`.
+3. Enable **Developer mode** and choose **Load unpacked**.
+4. Select the repository's `browser-extension` folder.
+5. Open the extension options, enter the pairing code, and refresh the video tab.
+
+The iPhone remote reports **Enhanced web control connected** when the active video page is ready. The extension talks only to `127.0.0.1`, stores its pairing code locally, and does not collect page or account data. See [browser-extension/README.md](browser-extension/README.md).
+
 ## Privacy and security
 
 - The service runs locally and does not upload browsing or playback data.
@@ -100,9 +114,12 @@ The project intentionally stays small:
 - `app.py` — local HTTP API, pairing, profile detection, and command dispatch
 - `native/remote_helper.m` — native macOS app detection and `CGEvent` keyboard synthesis
 - `Sources/MacVideoRemote/Resources/index.html` — dependency-free iPhone remote UI
+- `browser-extension/` — optional exact HTML5 video control for Chromium browsers
 - `Tests/test_app.py` — pairing, dispatch, and profile tests
 
 More detail is available in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+Google AI Studio or Cloud Run can host an onboarding/portfolio page, but cannot replace the local macOS control service. See [docs/AI_STUDIO.md](docs/AI_STUDIO.md).
 
 ## Development
 
@@ -117,6 +134,7 @@ PYTHONPYCACHEPREFIX=/tmp/mac-video-remote-pycache \
 - Signed menu-bar macOS application
 - QR-code pairing
 - Configurable per-app shortcuts
+- Packaged Safari Web Extension after the project moves to a full Xcode toolchain
 - Native iOS companion after the macOS app is packaged
 - Additional verified player profiles
 
@@ -128,4 +146,4 @@ Copyright © 2026 `liw10152-vanessa`. All rights reserved.
 
 The software is source-available for inspection and portfolio presentation. The [project license](LICENSE.md) permits personal, non-commercial use of the unmodified software but does not permit redistribution, derivative works, sublicensing, or commercial use without prior written permission.
 
-This project is independent and is not affiliated with, endorsed by, or sponsored by Apple, Bilibili, or Quark. Product and company names are used only to describe compatibility.
+This project is independent and is not affiliated with, endorsed by, or sponsored by Apple, ByteDance/Douyin, Rednote/Xiaohongshu, Bilibili, Quark, Google, or Microsoft. Product and company names are used only to describe compatibility.

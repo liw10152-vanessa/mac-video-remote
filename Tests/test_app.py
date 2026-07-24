@@ -25,7 +25,11 @@ class ServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.controller = FakeController()
-        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), app.make_handler("123456", cls.controller))
+        cls.browser_broker = app.BrowserCommandBroker()
+        cls.server = ThreadingHTTPServer(
+            ("127.0.0.1", 0),
+            app.make_handler("123456", cls.controller, cls.browser_broker),
+        )
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
         cls.base = f"http://127.0.0.1:{cls.server.server_port}"
@@ -49,10 +53,13 @@ class ServerTests(unittest.TestCase):
             html = response.read().decode("utf-8")
         self.assertIn("视频遥控器", html)
         self.assertIn("X-Pair-Code", html)
+        self.assertIn('id="pairing"', html)
+        self.assertIn("display-mode: standalone", html)
+        self.assertIn("Safari must keep the full URL", html)
 
     @mock.patch.object(app, "current_state")
     def test_action_is_dispatched(self, state):
-        state.return_value = {"controls": app.GENERIC_CONTROLS}
+        state.return_value = {"controls": app.GENERIC_CONTROLS, "controlMode": "keyboard"}
         request = urllib.request.Request(
             self.base + "/api/action",
             data=json.dumps({"action": "playPause"}).encode(),
@@ -62,6 +69,25 @@ class ServerTests(unittest.TestCase):
         with urllib.request.urlopen(request) as response:
             self.assertEqual(json.load(response)["ok"], True)
         self.assertEqual(self.controller.actions[-1], "playPause")
+
+    @mock.patch.object(app, "current_state")
+    def test_browser_action_is_queued_for_extension(self, state):
+        state.return_value = {
+            "controls": app.BROWSER_CONTROLS,
+            "controlMode": "browser-extension",
+        }
+        cursor = self.browser_broker.poll()["cursor"]
+        request = urllib.request.Request(
+            self.base + "/api/action",
+            data=json.dumps({"action": "speed150"}).encode(),
+            headers={"Content-Type": "application/json", "X-Pair-Code": "123456"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request) as response:
+            payload = json.load(response)
+        self.assertEqual(payload["transport"], "browser-extension")
+        queued = self.browser_broker.poll(cursor)
+        self.assertEqual(queued["commands"][0]["action"], "speed150")
 
 
 class ProfileTests(unittest.TestCase):
@@ -74,6 +100,54 @@ class ProfileTests(unittest.TestCase):
         state = app.current_state()
         self.assertEqual(state["profile"], "哔哩哔哩")
         self.assertIn("speedUp", state["controls"])
+
+    @mock.patch.object(app, "run_helper")
+    def test_douyin_is_detected(self, helper):
+        helper.return_value.stdout = json.dumps({
+            "appName": "抖音", "bundleIdentifier": "com.bytedance.douyin.desktop",
+            "accessibilityTrusted": True,
+        })
+        state = app.current_state()
+        self.assertEqual(state["profile"], "抖音")
+        self.assertNotIn("speedDouble", state["controls"])
+
+    @mock.patch.object(app, "run_helper")
+    def test_browser_enhanced_controls_require_connected_extension(self, helper):
+        helper.return_value.stdout = json.dumps({
+            "appName": "Google Chrome", "bundleIdentifier": "com.google.Chrome",
+            "accessibilityTrusted": True,
+        })
+        broker = app.BrowserCommandBroker()
+        basic = app.current_state(broker)
+        self.assertEqual(basic["controlMode"], "keyboard")
+        self.assertNotIn("speedDouble", basic["controls"])
+        broker.poll()
+        enhanced = app.current_state(broker)
+        self.assertEqual(enhanced["controlMode"], "browser-extension")
+        self.assertIn("speed150", enhanced["controls"])
+
+
+class BrowserCommandBrokerTests(unittest.TestCase):
+    def test_first_poll_does_not_replay_old_commands(self):
+        broker = app.BrowserCommandBroker()
+        broker.publish("playPause")
+        first = broker.poll()
+        self.assertEqual(first["commands"], [])
+        broker.publish("speed150")
+        second = broker.poll(first["cursor"])
+        self.assertEqual(second["commands"][0]["action"], "speed150")
+
+
+class NetworkAddressTests(unittest.TestCase):
+    @mock.patch.object(app.subprocess, "run")
+    def test_private_lan_address_is_preferred(self, run):
+        run.return_value.stdout = "192.168.0.105\n"
+        self.assertEqual(app.discover_lan_ipv4(), "192.168.0.105")
+
+    @mock.patch.object(app.subprocess, "run")
+    def test_missing_lan_address_falls_back(self, run):
+        run.return_value.stdout = ""
+        self.assertIsNone(app.discover_lan_ipv4())
 
 
 if __name__ == "__main__":

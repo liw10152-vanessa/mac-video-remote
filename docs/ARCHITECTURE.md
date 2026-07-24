@@ -9,14 +9,17 @@ iPhone Safari
 Python HTTP server (`app.py`)
     ├── frontmost-app profile selection
     ├── pairing and action validation
+    ├── authenticated browser-command queue
     ├── hold-process lifecycle and safety timeout
     └── system-volume AppleScript
-             │
-             ▼
+        │                         │ localhost polling
+        ▼                         ▼
 Native helper (`remote_helper.m`)
     ├── NSWorkspace frontmost application lookup
     ├── Accessibility trust status
     └── CGEvent keyboard tap / repeated key-down / key-up
+                                  Chromium extension
+                                  └── active HTML5 `<video>` control
 ```
 
 ## Design decisions
@@ -32,6 +35,12 @@ The helper uses public macOS frameworks for frontmost-application detection and 
 ### Player profiles instead of private media APIs
 
 Profiles map remote actions to documented or commonly supported keyboard controls. This avoids private playback frameworks and keeps compatibility logic explicit.
+
+### Optional browser extension for exact web control
+
+Websites do not share a standard keyboard shortcut for playback speed. The optional Manifest V3 extension polls an authenticated localhost queue only from a focused page containing video, then operates on the largest visible HTML5 video. A new extension session initializes at the newest queue cursor so stale actions are never replayed.
+
+If the extension has not polled recently, the server automatically reports keyboard mode and uses the normal frontmost-app fallback. System volume and fullscreen remain native controls.
 
 ### Persistent local pairing code
 
