@@ -4,6 +4,7 @@
 """Local-only iPhone remote for video playback on macOS."""
 
 import argparse
+import ipaddress
 import json
 import os
 import secrets
@@ -103,6 +104,25 @@ def load_or_create_pairing_code():
     code_file.write_text(code + "\n", encoding="utf-8")
     os.chmod(code_file, 0o600)
     return code
+
+
+def discover_lan_ipv4():
+    """Return a private Wi-Fi/Ethernet IPv4 address suitable for iPhone access."""
+    for interface in ("en0", "en1"):
+        try:
+            result = subprocess.run(
+                ["/usr/sbin/ipconfig", "getifaddr", interface],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            candidate = result.stdout.strip()
+            address = ipaddress.ip_address(candidate)
+            if address.version == 4 and address.is_private and not address.is_loopback:
+                return candidate
+        except (OSError, ValueError):
+            continue
+    return None
 
 
 class BrowserCommandBroker:
@@ -288,6 +308,7 @@ def main():
 
     pairing_code = args.code or load_or_create_pairing_code()
     hostname = socket.gethostname().split(".")[0] + ".local"
+    lan_ip = discover_lan_ipv4()
     controller = Controller()
     browser_broker = BrowserCommandBroker()
     server = ThreadingHTTPServer(
@@ -302,10 +323,19 @@ def main():
     signal.signal(signal.SIGINT, stop_server)
     signal.signal(signal.SIGTERM, stop_server)
     run_helper("prompt")
+    recommended_url = (
+        f"http://{lan_ip}:{args.port}/?code={pairing_code}"
+        if lan_ip
+        else f"http://{hostname}:{args.port}/?code={pairing_code}"
+    )
+    backup_url = f"http://{hostname}:{args.port}/?code={pairing_code}"
     print(f"""
 Mac Video Remote 已启动
-在 iPhone Safari 打开：
-http://{hostname}:{args.port}/?code={pairing_code}
+在 iPhone Safari 打开（推荐，添加到主屏幕也使用这个地址）：
+{recommended_url}
+
+备用 .local 地址：
+{backup_url}
 
 配对码：{pairing_code}
 首次使用请在“系统设置 → 隐私与安全性 → 辅助功能”允许 Terminal 控制电脑。

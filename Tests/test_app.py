@@ -138,5 +138,17 @@ class BrowserCommandBrokerTests(unittest.TestCase):
         self.assertEqual(second["commands"][0]["action"], "speed150")
 
 
+class NetworkAddressTests(unittest.TestCase):
+    @mock.patch.object(app.subprocess, "run")
+    def test_private_lan_address_is_preferred(self, run):
+        run.return_value.stdout = "192.168.0.105\n"
+        self.assertEqual(app.discover_lan_ipv4(), "192.168.0.105")
+
+    @mock.patch.object(app.subprocess, "run")
+    def test_missing_lan_address_falls_back(self, run):
+        run.return_value.stdout = ""
+        self.assertIsNone(app.discover_lan_ipv4())
+
+
 if __name__ == "__main__":
     unittest.main()
